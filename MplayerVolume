@@ -1,0 +1,53 @@
+#!/bin/bash
+
+##
+# Mplayer音量控制
+##
+# 参数：(U增加音量/D降低音量) (Mplayer控制地址) (步进速度秒) (开始音量) (结束音量)
+##
+####################################################################################
+
+Pattern=$1;Control=$2;Speed=$3;Svolume=$4;Evolume=$5;
+
+while (( Controlt<1800 ));do
+    COUNT=$(ps -ef |grep mplayer |grep -v "grep" |wc -l)
+    if [ '$COUNT' == '0' ]; then
+        sleep 0.1
+        let ++Controlt
+    else
+        Controlt=2000
+    fi
+done
+
+if [ $Controlt == 2000 ]; then
+    if [ "$Pattern" = "D" ]||[ "$Pattern" = "d" ]&&[ -n "$Control" ];then
+      declare -i i=$Evolume
+      while ((i>=$Svolume))
+      do
+        if [ ! -n "$Speed" ]; then
+          sleep 0.2
+        else
+          sleep $Speed
+        fi
+        echo "volume $i 1" > $Control
+        let --i
+      done
+    fi
+    if [ "$Pattern" == "U" ]||[ "$Pattern" = "u" ]&&[ -n "$Control" ];then
+      declare -i i=$Svolume
+      while ((i<=$Evolume))
+      do
+        if [ ! -n "$Speed" ];then
+          sleep 0.2
+        else
+          sleep $Speed
+        fi
+        echo "volume $i 1" > $Control
+        let ++i
+      done
+    fi
+else
+    exit 1
+    echo $(date) - 'MplayerVolume：等待超时'
+fi
+

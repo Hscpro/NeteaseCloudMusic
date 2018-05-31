@@ -1,0 +1,83 @@
+#!/bin/bash
+
+##
+# 和风天气API操作
+##
+# 参数：Heweather (T天气简报/S生活指数/K空气质量)
+##
+####################################################################################
+
+key_access=c974d98ef5XXXXXXXXXXXXX5b218be
+
+get_city=auto_ip
+
+#生成天气预报文本
+function get_weather(){
+  for(( get_weatherr = 1; get_weatherr <= 3; get_weatherr++ ));do
+    if [ "$1" = "T" ]||[ "$1" = "t" ]; then
+      weatherdata=$(curl -s https://free-api.heweather.com/s6/weather/forecast?parameters\&location=$get_city\&key=$key_access | jq '.')
+      if [ "$(echo $weatherdata | jq '.HeWeather6[0].basic.cid')" != "null" ]; then
+        get_weatherr=10
+	if [ "$(date +%H)" -lt "9" ];then
+	  greet="早上好！"
+	elif [ "$(date +%H)" -lt "12" ];then
+	  greet="上午好！"
+	elif [ "$(date +%H)" -lt "18" ];then
+	  greet="下午好！"
+	else
+	  greet="晚上好！"
+	fi
+	uv_index=$(echo $weatherdata | jq '.HeWeather6[0].daily_forecast[0].uv_index' | sed "s/\"//g")
+	if [ "$uv_index" -lt "3" ];then
+	  uv_index=较弱
+	elif [ "$uv_index" -lt "6" ];then
+	  uv_index=弱
+	elif [ "$uv_index" -lt "8" ];then
+	  uv_index=中等
+	elif [ "$uv_index" -lt "11" ];then
+	  uv_index=强
+	else
+	  uv_index=较强
+	fi
+    wind_spd=$(echo $weatherdata | jq '.HeWeather6[0].daily_forecast[0].wind_spd' | sed "s/\"//g")
+	if [ "$wind_spd" -lt "5" ];then
+	  wind_spd=无风
+	elif [ "$wind_spd" -lt "20" ];then
+	  wind_spd=微风
+	elif [ "$wind_spd" -lt "40" ];then
+	  wind_spd=大风
+	elif [ "$wind_spd" -lt "60" ];then
+	  wind_spd=强风
+	elif [ "$wind_spd" -lt "80" ];then
+	  wind_spd=暴风
+	else
+	  wind_spd=飓风
+	fi
+
+	returntxt=$greet'今天是'$(echo $weatherdata | jq '.HeWeather6[0].daily_forecast[0].date' | sed "s/\"//g")',今天日间天气'$(echo $weatherdata | jq '.HeWeather6[0].daily_forecast[0].cond_txt_d' | sed "s/\"//g")',晚间天气'$(echo $weatherdata | jq '.HeWeather6[0].daily_forecast[0].cond_txt_n' | sed "s/\"//g")'.最高温度'$(echo $weatherdata | jq '.HeWeather6[0].daily_forecast[0].tmp_max' | sed "s/\"//g")'度,最低温度'$(echo $weatherdata | jq '.HeWeather6[0].daily_forecast[0].tmp_min' | sed "s/\"//g")'度;紫外线'$uv_index','$wind_spd
+      fi
+    fi
+    if [ "$1" = "S" ]||[ "$1" = "s" ]; then
+      weatherdata=$(curl -s https://free-api.heweather.com/s6/weather/lifestyle?parameters\&location=$get_city\&key=$key_access | jq '.')
+      if [ "$(echo $weatherdata | jq '.HeWeather6[0].basic.cid')" != "null" ]; then
+        get_weatherr=10
+        returntxt=$(echo $weatherdata | jq '.HeWeather6[0].lifestyle[0].txt' | sed "s/\"//g")
+      fi
+    fi
+    if [ "$1" = "K" ]||[ "$1" = "k" ]; then
+      weatherdata=$(curl -s https://free-api.heweather.com/s6/air/now?parameters\&location=$get_city\&key=$key_access | jq '.')
+      if [ "$(echo $weatherdata | jq '.HeWeather6[0].basic.cid')" != "null" ]; then
+        get_weatherr=10
+        returntxt='空气'$(echo $weatherdata | jq '.HeWeather6[0].air_now_city.qlty' | sed "s/\"//g")
+      fi
+    fi
+  done
+  if [ "$get_weatherr" = "11" ];then
+    echo $returntxt
+  else
+    return 1
+  fi
+}
+
+#程序入口
+get_weather $2

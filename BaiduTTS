@@ -1,0 +1,63 @@
+#!/bin/bash
+
+##
+# 百度TTS语音合成
+##
+# 参数：baidu_tts (需要转换的文本) (播放音量，若为空则输出转换的URL)
+##
+####################################################################################
+
+get_txt=$1;playervolume=$2
+
+id_mac=$(hostname)
+key_api=zDxXdXXXXXXXI42xxxRL8
+key_secret=fab01dXXXXXXXXXXXXXXXXXXXXXX56543
+tts_spd=5
+tts_pit=5
+tts_vol=10
+tts_per=3
+APIMplayer=/tmp/MplayerTTS-Control
+
+function init(){
+  if [ -e "$APIMplayer" ]; then
+    rm $APIMplayer
+  fi
+  mkfifo $APIMplayer
+}
+
+function get_token(){
+  for(( get_tokenr = 1; get_tokenr <= 3; get_tokenr++ ));do
+    key_session=$(curl -s https://openapi.baidu.com/oauth/2.0/token?grant_type=client_credentials\&client_id=$key_api\&client_secret=$key_secret | jq '.access_token' | sed 's/"//g')
+    if [ -n $key_session ]; then
+      get_tokenr=10
+    fi
+  done
+  if [ "$get_tokenr" = "11" ];then
+    return 0
+  else
+    exit 1
+  fi
+}
+
+function get_ttsurl(){
+  for(( get_ttsurl = 1; get_ttsurl <= 3; get_ttsurl++ ));do
+    ttsurl=https://tsn.baidu.com/text2audio?tok=$key_session\&tex=$get_txt\&cuid=$id_mac\&ctp=1\&lan=zh\&spd=$tts_spd\&pit=$tts_pit\&vol=$tts_vol\&per=$tts_per
+    curl -s --connect-timeout 3 --head $ttsurl | head -n 1 | grep "HTTP/1.[01] [23].." > /dev/null 2>&1
+    if [ $? = 0 ]; then
+      return 0
+    else
+      exit 2
+    fi
+  done
+}
+
+function playertts(){
+  if [ ! -n "$playervolume" ]; then
+    echo $ttsurl
+  else
+    echo PlayerTTS: $get_txt
+    mplayer -slave -input file=$APIMplayer -cache-min 10 -cache 10240 -really-quiet -softvol -volume $playervolume "$ttsurl" > /dev/null 2>&1
+  fi
+}
+
+get_token;get_ttsurl;playertts

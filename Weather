@@ -1,0 +1,33 @@
+#!/bin/bash
+
+##
+# 天气预报播放
+##
+# 参数：(Mplayer的控制通道) (延迟几秒触发) (步进速度秒) (把音乐音量降低到多少) (原始音乐播放音量)
+##
+####################################################################################
+
+Control=$1;Delay=$2;Stepping=$3;Evolume=$4;Svolume=$5;
+
+work_path=$(dirname $(readlink -f $0))
+
+while (( Controlt<1800 ));do
+    COUNT=$(ps -ef |grep mplayer |grep -v "grep" |wc -l)
+    if [ '$COUNT' == '0' ]; then
+        sleep 0.1
+        let ++Controlt
+    else
+        Controlt=2000
+    fi
+done
+
+if [ $Controlt == 2000 ]; then
+    sleep $Delay
+    #killall MplayerVolume > /dev/null 2>&1
+    $work_path/MplayerVolume D $Control $Stepping $Evolume $Svolume
+    $work_path/BaiduTTS $($work_path/Heweather T)\,$($work_path/Heweather K)\.$($work_path/Heweather S) $Svolume
+    $work_path/MplayerVolume U $Control $Stepping $Evolume $Svolume
+else
+    exit 1
+    echo $(date) - 'Weather：等待超时'
+fi

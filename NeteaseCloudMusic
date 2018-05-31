@@ -1,0 +1,156 @@
+#!/bin/bash
+##
+# 网易云每日推音乐播放
+##
+# 依赖：JQ,Mplayer,NeteaseCloudMusicApi
+##
+####################################################################################
+
+#Systemd-notify
+if [ $INVOCATION_ID ];then 
+    echo 'Systemd ID:' $INVOCATION_ID
+    systemd-notify --pid=$$
+    systemd-notify --ready
+fi
+
+work_path=$(dirname $(readlink -f $0))
+
+Phone="账号必须为电话形式"
+PassWord="账号密码"
+number=20
+APIService=localhost:3000
+APIMplayer=/tmp/MplayerMusic-Control
+effect=-2:3:9:1:0:-1:0:3:2:3
+declare -a dataid
+musicid=""
+
+function init(){
+  weather=$1
+  /usr/bin/amixer set PCM 95% > /dev/null
+  if [ -e "$APIMplayer" ]; then
+    rm $APIMplayer
+  fi
+  mkfifo $APIMplayer
+  if [ ! -d "$work_path/cache" ]; then
+    mkdir $work_path/cache
+  fi
+  chedir=$work_path/cache
+}
+
+function playermusic(){
+  killall MplayerVolume > /dev/null 2>&1
+  killall mplayer > /dev/null 2>&1
+  killall Weather > /dev/null 2>&1
+  if [ "$1" = "0" ];then
+    $work_path/MplayerVolume U $APIMplayer 0.5 0 50 &
+  else
+    $work_path/MplayerVolume U $APIMplayer 0.2 0 35 &
+  fi
+  if [ "$weather" = "-weather" ]&&[ "$1" = "1" ];then
+    sleep 1 && $work_path/Weather $APIMplayer 60 0.3 15 35 &
+  fi
+  mplayer -slave -input file=$APIMplayer -cache-min 10 -cache 51200 -really-quiet -softvol -volume 0 -af equalizer=$effect $2 > /dev/null 2>&1
+}
+
+function login(){
+  for(( loginr = 1; loginr <= 3; loginr++ ));do
+    httpcode=$(curl -s -D $chedir/NeteaseCloudHeader http://$APIService/login/cellphone?phone=$Phone\&password=$PassWord | jq '.code')
+    if [ "$httpcode" = "200" ]||[ "$httpcode" = "304" ];then
+      grep -Eoi '^set-cookie.*$' $chedir/NeteaseCloudHeader | grep -Eoi 'set-cookie[^;]*;' | grep -Eoi ' .*$' | sed -e ':a;N;s/\n//;ta' | sed 's/ \+/ /g' | sed 's/^[[:space:]]*//' > $chedir/NeteaseCloudCookies
+      echo 'Login OK: '$httpcode
+      echo 'Cookies: ' $(cat $chedir/NeteaseCloudCookies)
+      loginr=10;
+    else
+      echo 'Login Error'$loginr': '$httpcode
+    fi
+  done
+  if [ "$loginr" = "11" ];then
+    return 0
+  else
+    return 1
+  fi
+}
+
+function getrecommend(){
+  for(( idr = 1; idr <= 3; idr++ ));do
+    jsondata=$(curl -s --cookie "$(cat $chedir/NeteaseCloudCookies)" http://$APIService/recommend/songs | jq '.')
+    httpcode=$(echo $jsondata | jq '.code')
+    if [ "$httpcode" = "200" ]||[ "$httpcode" = "304" ];then
+      echo 'Recommend OK: '$httpcode
+      for(( i = 0; i < $number; i++ ));do
+        dataid[$i]=$(echo $jsondata | jq ".recommend[$i].id")
+        musicid+=${dataid[$i]}','
+      done
+      echo 'MusicID: '${musicid%?}
+      idr=10
+    else
+      echo 'Recommend Error'$idr': '$httpcode
+    fi
+  done
+  if [ "$idr" = "11" ];then
+    return 0
+  else
+    return 1
+  fi
+}
+
+function getmusicurl(){
+  for(( inx = 0; inx < $number; inx++ ));do
+    urldata=$(curl -s --cookie "$(cat $chedir/NeteaseCloudCookies)" http://$APIService/music/url?id=${dataid[$inx]} | jq '.')
+    httpcode=$(echo $urldata | jq '.code')
+    if [ "$httpcode" = "200" ]||[ "$httpcode" = "304" ];then
+      musicurl=$(echo $urldata | jq ".data[0].url" | sed 's/\"//g')
+      curl -s --connect-timeout 3 --head $musicurl | head -n 1 | grep "HTTP/1.[01] [23].." > /dev/null 2>&1
+      if [ $? = 0 ]; then
+        echo "Player: Player high sound quality. ID_"${dataid[$inx]}
+        playermusic $inx $musicurl
+      else
+        echo "Player: Player low sound quality. ID_"${dataid[$inx]}
+        playermusic $inx http://music.163.com/song/media/outer/url?id=${dataid[$inx]}.mp3
+      fi
+    else
+      echo "Player: Player low sound quality. ID_"${dataid[$inx]}
+      playermusic $inx http://music.163.com/song/media/outer/url?id=${dataid[$inx]}.mp3
+    fi
+  done
+}
+
+function main(){
+  if [ -e "$chedir/NeteaseCloudCookies" ]; then
+    getrecommend
+    if [ $? == 0 ];then
+      getmusicurl
+      return 0
+    else
+      login
+      if [ $? == 0 ];then
+        getrecommend
+	if [ $? == 0 ];then
+          getmusicurl
+          return 0
+	else
+          echo "GetRecommend Error!"
+          return 2
+	fi
+      else
+        echo "Login Error!"
+        return 1
+      fi
+    fi
+  else
+    login
+    if [ $? == 0 ];then
+      getrecommend
+      if [ $? == 0 ];then
+        getmusicurl
+        return 0
+      else
+        echo "GetRecommend Error!"
+        return 2
+      fi
+    else
+      echo "Login Error!"
+      return 1
+    fi
+  fi
+};init $1;main
