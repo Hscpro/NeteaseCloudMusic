@@ -96,7 +96,7 @@ function getrecommend(){
 
 function getmusicurl(){
   for(( inx = 0; inx < $number; inx++ ));do
-    urldata=$(curl -s --cookie "$(cat $chedir/NeteaseCloudCookies)" http://$APIService/music/url?id=${dataid[$inx]} | jq '.')
+    urldata=$(curl -s --cookie "$(cat $chedir/NeteaseCloudCookies)" http://$APIService/song/url?id=${dataid[$inx]} | jq '.')
     httpcode=$(echo $urldata | jq '.code')
     if [ "$httpcode" = "200" ]||[ "$httpcode" = "304" ];then
       musicurl=$(echo $urldata | jq ".data[0].url" | sed 's/\"//g')
